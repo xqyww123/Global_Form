@@ -1,0 +1,3 @@
+src/Pure/Isar/local_defs.ML
+src/Pure/Isar/local_theory.ML
+src/Pure/assumption.ML

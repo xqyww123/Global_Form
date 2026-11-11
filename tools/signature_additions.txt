@@ -1,0 +1,6 @@
+# Every signature entry global_form adds to an .ML file, as
+# `<path> <SIGNATURE NAME> <keyword> <name>` (check-signatures).
+src/Pure/assumption.ML ASSUMPTION val suspend_result
+src/Pure/Isar/local_defs.ML LOCAL_DEFS val is_def_assms
+src/Pure/Isar/local_theory.ML LOCAL_THEORY val global_form_result
+src/Pure/Isar/local_theory.ML LOCAL_THEORY val global_form

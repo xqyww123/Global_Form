@@ -1,0 +1,11 @@
+(* The test session of global_form: build it with an extra "-d contrib/global_form/tests". *)
+
+session Global_Form_Test = HOL +
+  description "
+    Checks of Local_Theory.global_form: results stored without the assumptions of the context,
+    definitions kept, assumptions put back afterwards, nested use, forked results, and
+    datatype and codatatype in a locale.  Any failing check fails the build.
+  "
+  options [timeout = 600]
+  theories
+    Global_Form_Test

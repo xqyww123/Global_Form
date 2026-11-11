@@ -1,0 +1,10 @@
+[submodule "worktrees/Isabelle2026-global_form"]
+	path = worktrees/Isabelle2026-global_form
+	url = https://github.com/xqyww123/isabelle-patched.git
+	branch = Isabelle2026/global_form
+	base = Isabelle2026/sledgehammer_fact_trigger
+	ignore = all
+[submodule "worktrees/Isabelle2026-global_form-stock"]
+	path = worktrees/Isabelle2026-global_form-stock
+	url = https://github.com/xqyww123/isabelle-patched.git
+	ignore = all
