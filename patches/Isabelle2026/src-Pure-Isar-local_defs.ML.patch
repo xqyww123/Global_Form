@@ -1,0 +1,59 @@
+diff --git a/src/Pure/Isar/local_defs.ML b/src/Pure/Isar/local_defs.ML
+index 5251a49..923ec3e 100644
+--- a/src/Pure/Isar/local_defs.ML
++++ b/src/Pure/Isar/local_defs.ML
+@@ -10,6 +10,7 @@ sig
+   val abs_def: term -> (string * typ) * term
+   val expand: cterm list -> thm -> thm
+   val def_export: Assumption.export
++  val is_def_assms: Assumption.export * cterm list -> bool
+   val define: ((binding * mixfix) * (Thm.binding * term)) list -> Proof.context ->
+     (term * (string * thm)) list * Proof.context
+   val fixed_abbrev: (binding * mixfix) * term -> Proof.context ->
+@@ -97,6 +98,21 @@ val expand_term = Envir.expand_term_defs dest_Free o map (abs_def o Thm.term_of)
+ 
+ fun def_export _ defs = (expand defs, expand_term defs);
+ 
++(*prop defines a fixed variable that term_export expands*)
++fun defines_free term_export prop =
++  (case try head_of_def prop of
++    NONE => false
++  | SOME x =>
++      let val t = Free x in
++        (case try term_export t of
++          NONE => false
++        | SOME u => not (t aconv u))
++      end);
++
++(*assumptions whose own export expands each of them: definitions, not hypotheses*)
++fun is_def_assms ((export, asms): Assumption.export * cterm list) =
++  forall (defines_free (#2 (export false asms)) o Thm.term_of) asms;
++
+ 
+ (* define *)
+ 
+@@ -141,20 +157,14 @@ fun fixed_abbrev ((x, mx), rhs) ctxt =
+ *)
+ fun export inner outer th =
+   let
++    val term_export = Assumption.export_term inner outer;
+     val defs_asms =
+       Assumption.local_assms_of inner outer
+       |> filter_out (Drule.is_sort_constraint o Thm.term_of)
+       |> map (Thm.assume #> (fn asm =>
+-        (case try (head_of_def o Thm.prop_of) asm of
+-          NONE => (asm, false)
+-        | SOME x =>
+-            let val t = Free x in
+-              (case try (Assumption.export_term inner outer) t of
+-                NONE => (asm, false)
+-              | SOME u =>
+-                  if t aconv u then (asm, false)
+-                  else (Drule.abs_def (Variable.gen_all outer asm), true))
+-            end)));
++        if defines_free term_export (Thm.prop_of asm)
++        then (Drule.abs_def (Variable.gen_all outer asm), true)
++        else (asm, false)));
+   in (apply2 (map #1) (List.partition #2 defs_asms), Assumption.export inner outer th) end;
+ 
+ (*
