@@ -1,6 +1,6 @@
 feature: Isabelle2026/global_form
-release_tag: Isabelle2026/global_form/1
-commit: c2858be7d488d460f342a8597f260856f456e996
-base_tag: Isabelle2026/sledgehammer_fact_trigger/1
-base_commit: ffe3a04dc4fc69225d4125942c54e3fbf21e32d4
+release_tag: Isabelle2026/global_form/2
+commit: edce95aebc50ec060d0fab405f5453e407afbc0c
+base_tag: Isabelle2026/sledgehammer_fact_trigger/3
+base_commit: 7de251e8ab13dfc5a3ab516297f3f4cc462eba24
 build_string_prefix: Isabelle2026
