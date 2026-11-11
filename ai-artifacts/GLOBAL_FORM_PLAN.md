@@ -42,7 +42,8 @@ datatype 的规则不带 `C ?S`"这条验收目前跑不了；本 feature 先用
 ### 1.2 不做的事
 
 不提供用户级命令；不改任何 target 的 `notes`、`define`；不改 `Generic_Target`、`Goal`、`Thm`、
-`Global_Theory`；不对"结果仍带 hyps"做任何检查（【已定】，理由见 §3.6）；不接受非 local theory 的 context。
+`Global_Theory`；不对"结果仍带 hyps"做任何检查（【已定】，理由见 §3.6）；不接受非 local theory 的 context；不支持 class target、`instantiation`、
+overloading（【已定】，见 §3.7）；不做 Isabelle2025-2（【已定】）。
 
 ## 2. 一个运行例子
 
@@ -206,8 +207,8 @@ fun global_form f = #2 o global_form_result (f #> pair ());
   定理；它的"导出形式"分支只收无 hyp 的定理，不受影响；`concept_degeneracy_check` 的钩子只发 warning。
   这三点待 local_datatype 接入时在真实树上验证（§1.1）。
 - 嵌套 `context fixes … assumes … begin`：该层的 `assumes` 一并取走。
-- class target、`instantiation`、overloading：走同一套通用机制，不专门支持也不专门禁止。【未核实】不在 v1
-  测试范围。
+- class target、`instantiation`、overloading：**不支持**（【已定】，作者 2026-11-11）。代码走同一套通用机制、
+  没有专门禁止，但没有测过，行为不作保证。
 
 `f` 运行期间，对被包的 lthy 及其派生 context 调 `Assumption.all_assms_of` 的工具（Sledgehammer、Nitpick、
 `Skip_Proof`）看不到假设；Quickcheck 的 locale 模式拿 `Locale.init` 新建的 context 作 outer
@@ -226,7 +227,7 @@ fun global_form f = #2 o global_form_result (f #> pair ());
   `redeclare_result` 等；合并冲突由 light_locale 一侧在换 base 时处理。
 - `tools/signature_additions.txt`：`Assumption.suspend_result`、`Local_Defs.is_def_assms`、
   `Local_Theory.global_form_result`、`Local_Theory.global_form`。
-- 只在 Isabelle2026 上做（【提案】）。
+- 只在 Isabelle2026 上做（【已定】）。
 
 ## 5. 测试（`tests/`，session `Global_Form_Test`，父 session HOL）
 
