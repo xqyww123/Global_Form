@@ -1,5 +1,9 @@
 # global_form：计划（rev 4，2026-11-11，已实现；与代码同步）
 
+**2026-11-23 加了第 8 节：一个开关，和在它之下运行的几个命令。**第 1 至 7 节是 2026-11-11 的状态，没有改；与第 8 节不一致的地方以第 8 节为准，
+主要是：1.1"消费者只有一个""本 feature 只碰 Pure，对 HOL 零改动"、第 4 节的 base 与链、3.5 的 `global_form_result`、第 5 节的测试 1 与 14。
+原来做这个 feature 的会话已不在；第 8 节由 concept A1 会话做（作者 2026-11-23 04:00 UTC：「交给你来做」）。
+
 标记：【已定】= 作者已批；【提案】= 我提的、作者未表态；【未核实】= 只凭读源码推断，实现时要用测试验证。
 行号按 `Isabelle2026/pristine`；本 feature 的 base（见 §4）没有改动这里引用的任何文件。
 
@@ -291,3 +295,140 @@ fun global_form f = #2 o global_form_result (f #> pair ());
 - 违约的报错是 kernel 的原始文案，不带 fact 名；forked 的推迟到 join。
 - concept 一侧的验收（§1.1、§3.7）要等上层 feature 的 2026 树就位。
 - light_locale 换 base 时要合并 `local_theory.ML`。
+
+## 8. 开关，和在它之下运行的命令（2026-11-23）
+
+状态：代码在私有树里改好、测试通过，**未提交**；清单作者 05:25 UTC 定为六个（8.4B），代码与测试已照此；2026-11-23 05:4x UTC 送代码评审。文中时刻是 UTC。
+8.2 与 8.3 写的是最终的样子；8.4、8.4A 是到达它的经过（其中"七个""`copy_bnf` 建议不包"等是当时的说法）。
+
+### 8.1 作者定了什么
+
+出处是 concept 的 A 区计划 `ai-artifacts/CONCEPT_A_DECLARATION_PLAN.md` 2.5（MLML 仓库）；那时本 feature 的会话已经关闭，所以一直没有做。
+- 【已定，作者 2026-11-14】`global_form` 受一个开关控制：`Config.declare_bool` 建的布尔选项，没有 attribute，用户写不出；
+  把 fact 存成全局形式的 target（concept 的块、实例上下文）在自己的 `setup` 里把它设为真。`global_form`、`global_form_result` 开着才取走假设，关着就是 `f`；不另加无条件的版本。
+- 【已定，作者 2026-11-14】用到它的命令（"入口"）都并进本 feature，各自在入口处无条件地包一层 `global_form`；命令因此不认识 concept。
+  入选的判据："证明全由包或内核生成、用户插不进 fact"。清单是九个：
+  `definition`、`record`、`datatype`、`codatatype`、`primrec`、`primcorec`、`datatype_compat`、`copy_bnf`、`bnf`。
+- 【已定，作者 2026-11-16「赞同 两处绕开 Pure.thy 的做法」】任何 `.thy` 文件都不改；`definition` 命令定义在 `Pure.thy`，所以包在它调的 `Specification.definition_cmd` 里。
+- stock 的 locale 一字不改（作者 2026-11-11）：开关默认关着，所以 stock 的每一种 target 里这些命令与原来相同。
+
+### 8.2 做了什么
+
+- `src/Pure/Isar/local_theory.ML`：signature 加一行 `val global_form_enabled: bool Config.T`；
+  `global_form_result f lthy` 先 `assert`，开关开着照 3.5 取走假设，关着就是 `f lthy`。
+- 六个入口，各一处：
+  - `src/Pure/Isar/specification.ML`：`definition_cmd` 包在 `Local_Theory.global_form_result` 里。ML 函数 `Specification.definition` 不包。
+    在 Isabelle 自己的源码里 `definition_cmd` 只有 `definition` 命令这一个调用者（`Pure.thy`）；不改 `.thy` 文件就没有别的地方可以放这一行。
+    配套的 AFP（`afp-2026-10-26`）里另有五个条目从 ML 调它（ConcurrentIMP、Optics、Isabelle_C、Isabelle_Meta_Model、Isabelle_DOF）：
+    开关开着时它们存下的定义定理也不带前提，与 `definition` 命令相同。（2026-11-23 代码评审 `review_switch_1` 指出原来那句"只有一个调用者"只在 Isabelle 里成立，照改。）
+  - `src/HOL/Tools/BNF/bnf_lfp.ML`（`datatype`）、`bnf_gfp.ML`（`codatatype`）、`bnf_lfp_rec_sugar.ML`（`primrec`）、
+    `bnf_lfp_compat.ML`（`datatype_compat`）、`bnf_lift.ML`（`copy_bnf`）：在定义命令的那一行包 `Local_Theory.global_form`。各包的 ML 函数不包。
+  - `primcorec` 一度包过（`bnf_gfp_rec_sugar.ML`），作者 05:25 UTC 定了不留，已撤回。
+- 于是本 feature 不再"只碰 Pure"：补丁文件从三个变成九个，其中五个在 HOL。
+
+### 8.3 测试与实测（`tests/Global_Form_Test.thy`；日志在 `ai-artifacts/nine_entries/`，不提交）
+
+- 只供测试的命令 `global_form_enable`：在打开的 local theory 的每一层把开关设为真。它取代原来两个只供测试的命令（`global_form_datatype`、`global_form_codatatype`）。
+  原有的测试里，在 local theory 的块里的（2 至 12、15）都先写它，断言不变；测试 1 在 theory target 上，开关写在它的 `local_setup` 里；
+  测试 13 测的不是 local theory，不写（`global_form_result` 仍先 `assert`，所以它照旧）；测试 14 改写，见下。
+- 新的测试：
+  - 16：开关没开时 `global_form` 什么都不做（里面的假设还在，存下的定理带着 locale 的前提）。
+  - 14（改写）、17、18、20、21：开着开关的 stock locale 块里，stock 的 `datatype`、`codatatype`、`definition`（用到 locale 的参数的、带 attribute 的、带条件的）、`primrec`、
+    `datatype_compat`、`copy_bnf` 存下的定理都没有 locale 的前提。
+  - 19：`primcorec` 不在 `global_form` 之下：开着开关的块里，它对一个在 `global_form` 之下定义的 codatatype 存下的定理带着 locale 的前提。
+  - 22：这些命令之后假设都放回了（之后的 lemma 带着 locale 的前提）。
+  - 每个包着的命令都有一个会带上前提的对照：同样的命令写在没开开关的块里（`datatype`、`codatatype`、`definition`、`primrec`、`copy_bnf`）；
+    `datatype_compat` 的对照是在开着开关的块里直接调它没有包的 ML 函数。
+    `definition` 另有一个同样的对照（评审之后加的）：在开着开关的块里直接调没有包的 ML 函数 `Specification.definition`，它存下的定理带着 locale 的前提；
+    这一条钉住"包只在命令的入口，不在 ML 函数里"。
+- **代码评审 `wf_507090bf-f6d`（2026-11-23 05:44 至 06:04 UTC；结果 `ai-artifacts/nine_entries/review_switch_1_result.json`，不提交）：通过**，五条验收标准都满足。
+  留下的都判给维护者、不用再审，已改（06:1x 至 06:3x UTC）：
+  - 8.2 里"`definition_cmd` 只有一个调用者"那一句只在 Isabelle 里成立，已照改（见 8.2）。
+  - 本节两处措辞：哪些原有测试写了开关；Pure 是在哪一次构建里重建的。
+  - 测试代码三处整洁：测试 17 里对变量先后的断言去掉多余的 `orelse`；测试 16 去掉多套的一层 `fn`；helper `facts_of_type` 改名 `facts_named`。
+  - 裁判说可做可不做的两处，都做了：上面 `definition` 的那个对照；测试 20 里一行分辨不出 `datatype_compat` 包没包的断言（`.ls.eq.`）删去。
+  - 驳回的一条：把五处 HOL 入口写成同一种拼法（裁判数了 Isabelle 自己 44 处命令入口的写法，现在的三种拼法各是那种形状的惯用写法）。
+  改完之后 `Global_Form_Test` 在默认设置（`build_test_10.log`）与 `-o parallel_proofs=0`（`build_test_11_pp0.log`）下通过。
+- 评审之前的最终的样子 2026-11-23 05:35 至 05:43 UTC 跑的：HOL 在改过的树上重建通过（`build_hol_3.log`；开关关着时这些命令走的是原来的路，这次构建同时充当回归）；
+  Pure 的源码 04:05 UTC 之后没有再改，它是在 `build_hol_1.log` 里重建的，到 `build_hol_3.log` 时已是最新；
+  `Global_Form_Test` 在默认设置（`build_test_7.log`）与 `-o parallel_proofs=0`（`build_test_8_pp0.log`）下通过。
+  （七个入口时的那一版 04:1x UTC 也跑过：`build_hol_1.log`、`build_test_5.log`、`build_test_6_pp0.log`。）
+- 没有做的：逐个去掉某一处的包、重建 HOL、确认测试失败（每个要重建一次 HOL，约 9 分钟）。上面的对照说明的是"包没有起作用时断言会失败"。
+- 探针量到的（`ai-artifacts/nine_entries/Entries_Probe.thy`，结果 `entries_probe.out`、`build_probe_2.log` 至 `build_probe_4.log`）：
+  - `copy_bnf` 对 theory 里定义的类型：没开开关时存 59 条定理、每条都带 locale 的前提；开着时 59 条都不带。
+  - **`copy_bnf` 对同一个块里 `typedef` 出来的类型，开着开关时失败**：`typedef` 没有包，它的 `type_definition_…` 在块里带着 locale 的假设作 hyp（实测 1 条）；
+    `copy_bnf` 的命令本身不报错，之后并行的证明在汇合时报 `future_result: bad hyps`（六条，不带位置），整个 theory 失败。这是 3.6 第 4 条说的违约情形。
+  - `datatype_compat`：对不嵌套的 datatype，包不包存下的定理相同（四条，都没有前提，是在 theory 层登记的）；对嵌套的 datatype 它另外 note 几条规则，不包时带前提（测试 20 用的是这种）。
+  - stock 就有的一处：没开开关的 locale 块里定义的 datatype，`datatype_compat` 失败（`TERM dest_equals`，case 的等式带着 locale 的前提）。开着开关时通过。
+
+### 8.4 与清单不同的三处【等作者定】
+
+1. **`record` 在这棵树里包不了。**这里的 `record` 还是 theory 层的命令（`Toplevel.theory`），不能写在任何 local theory 的块里，没有可包的地方。
+   把它变成 local theory 命令的是 `localized_record`，在新的链里排在 concept 之后；那一行要加在那个 feature 里。
+2. **`bnf` 不满足判据，没有包。**它是交出证明目标的命令（`local_theory_to_proof`），BNF 的各条公理由用户证，与定了不包的 `typedef` 同类。
+   - 只包它证完之后的那一段不行：用户证出的定理在证明并行时带着全部假设，那一段一存就报错；不并行时只在证明用到假设时才报错。结果随证明是否并行而变。
+   - 让整段（连同用户的证明）都不带假设，要把"取走"与"放回"拆成两个单独导出的函数，违背 3.3 定的"不单独导出，写不出不配对的用法"。
+   - 建议：`bnf` 不包。
+3. **`copy_bnf` 照清单包了，但它对块里 `typedef` 出来的类型会失败**（8.3 的实测），而"先 `typedef`、紧接着 `copy_bnf`"是它最常见的用法。
+   它拿用户的 `typedef` 的定理作输入，严格说也不满足判据。
+   - 不包的话：两种类型都能用，存下的定理带着 locale（concept）的前提。
+   - 建议：`copy_bnf` 不包。
+
+照建议做的话，本 feature 里包的是六个：`definition`、`datatype`、`codatatype`、`primrec`、`primcorec`、`datatype_compat`。
+
+读代码推断、没有量的一处后果：块里的 `datatype` 若经一个"BNF 的定理依赖块的假设"的类型嵌套（如块里 `typedef` 之后不包的 `copy_bnf`、`bnf`、`lift_bnf` 登记的类型），会同样报 `bad hyps`。
+
+### 8.4A 讨论与补量（2026-11-23 04:3x 至 04:5x）
+
+作者 04:2x：对 8.4 的第 2、3 条「run Opus agent team 讨论一下」。Workflow `wf_66fe07f9-e7d`：三个提示词相同的 agent 各自作答，一个只比较异同并核有分歧的事实。
+结果 `ai-artifacts/nine_entries/discussion_bnf_copy_bnf_result.json`（不提交）。
+
+- **`bnf`：三方一致，不包。**理由与 8.4 第 2 条相同；另指出它在用户证明之前就定义了几个常量，只包后半段的话存下的东西一半带前提一半不带。`lift_bnf` 同理不包。
+- **`copy_bnf`：一比二。**一方主张不包（同 8.4 第 3 条）；两方主张照清单包着，把"块里 `typedef` 之后 `copy_bnf`"写成不支持的用法。
+  比较的一方核出两条 8.4 第 3 条没有算进去的代价（读源码），下面的探针量实了：不包的登记在块里、在 theory 里都不能再被 datatype 嵌套。
+- 三方都认为入选的判据要写得更准，各拟了一句；其中两句会把已入选的 `primcorec` 也划成有疑问的（它对不平凡的互斥义务用上下文的 `auto`，与 `fun` 被排除的理由同类）。
+
+**补量**（`ai-artifacts/nine_entries/nesting/`，四个探针 theory；`build_default.log` 与 `build_pp0.log`，04:55 UTC）。块是开着开关的 stock locale；"包着"指命令在开关开着时运行，"不包"用开关还没开时运行来代替。
+
+| 情形 | 证明并行（默认） | `parallel_proofs=0` |
+|---|---|---|
+| A：包着的 `copy_bnf` 登记 theory 里的类型，块里的 `datatype` 经它嵌套，块外的 `datatype` 再经它嵌套 | 都通过；三组定理（118、70、125 条）没有一条带 locale 的前提 | 相同 |
+| B：块里 `typedef`，再包着的 `copy_bnf` | 命令返回，之后六条 `future_result: bad hyps`，不带位置 | 在 `copy_bnf` 那一行报 `generalize: variable free in assumptions` |
+| C：不包的 `copy_bnf` 登记 theory 里的类型，块里（包着的）`datatype` 经它嵌套 | 在 `datatype` 那一行报 `generalize: variable free in assumptions` | 相同 |
+| D：不包的 `copy_bnf` 在块里登记 theory 里的类型，之后 theory 层的 `datatype` 经它嵌套（整个情形里开关没有开过，是 stock 的行为） | 在 `datatype` 那一行报 `CTERM Trueprop_conv`，命题是带着 `LP ?S ⟹` 的那条 | 在 `datatype` 那一行报 `Tactic failed` |
+
+量出来的结论：
+- 不包的登记（C、D）让那个类型的 BNF 带上块的前提，块里、块外的 datatype 都不能再经它嵌套；D 说明这在 stock 的 locale 里本来就是这样。`bnf`、`lift_bnf` 不包，同样如此（没有单独量 `bnf`）。
+- 包着的 `copy_bnf` 对块外定义的类型是完整可用的（A）；对块里 `typedef` 的类型在两种运行方式下都失败（B），只是报错的地方不同。
+- 所以 8.4 第 3 条"建议 `copy_bnf` 不包"**撤回**：不包并不是"两种都能用"，而是登记出来的 BNF 不能再用于嵌套。concept A1 现在的建议是照清单包着。
+
+另一件相关的事实（concept 的树里量的，`concept_A_prototype/command_dev/build19.log`）：块里的 `typedef` 既不能提到块固定的变量，类型参数也不能是块里固定的类型变量，
+所以它定义的类型与块无关；把 `typedef` 连同它的 `copy_bnf` 写在块外不损失什么（除非非空证明要用块的假设）。
+
+**现在等作者定的**：`bnf` 从清单里拿掉；`copy_bnf` 留在清单里、"块里 `typedef` 之后 `copy_bnf`"记作不支持的用法；判据的措辞；`primcorec` 留不留。
+
+### 8.4B 作者 2026-11-23 05:25 的决定，与随之做的
+
+作者的原话：「赞同 bnf 从清单里拿掉；copy_bnf 留在清单里；」「既然如此，建议禁止在 concept (instance) context 中写 typedef，因为这是无意义的」「primcorec 不留」；对判据的措辞：「你可以自决」。
+
+- **在 `global_form` 之下运行的命令定为六个**：`definition`、`datatype`、`codatatype`、`primrec`、`datatype_compat`、`copy_bnf`。
+  `bnf` 没有包过；`primcorec` 的那一行已撤回（`bnf_gfp_rec_sugar.ML` 回到原样），测试 19 改成"它不在 `global_form` 之下，存下的定理带着 locale 的前提"。
+  `record` 的那一行留给 `localized_record`（8.4 第 1 条）。
+- **判据**【concept A1 定】：一个命令在 `global_form` 之下运行，当且仅当它不向用户要证明，它的证明也不去上下文的规则集里找 fact；
+  它用到的 fact 只有描述它所处理的类型的那些（typedef 的定理、登记的 BNF、datatype 自己的规则）。入选之后，交给它一个依赖上下文的假设的这类 fact，属于不支持的用法，不检查。
+  清单以作者定的为准；这句话之下已知的一处出入是 `copy_bnf` 对 quotient 类型走的那条路用到上下文的 simpset（读源码，没有量）。
+- **这样的上下文里的 `typedef` 不被支持：只写进文档，代码里不拦**【已定，作者 2026-11-23 05:3x UTC：「我建议 做法二：只写进文档，代码里不拦」「因为 local theory 下的 typedef 本身就不合理」】。
+  - 本 feature 因此不碰 `typedef.ML`。stock 的 `typedef` 本来就能写在任何 local theory 里（`local_theory → proof`）；参考手册自己说
+    "the newly introduced type constructor cannot depend on parameters or assumptions of the context … The non-emptiness proof may formally depend on local assumptions, but this has little practical relevance"（`HOL_Specific.thy`）。
+  - 写了会怎样（8.4A 的 B，实测）：`typedef` 本身成功，存下的定理带着上下文的前提；之后在同一个块里对这个类型写 `copy_bnf` 会失败。
+  - concept A1 拟过另一种做法（`Typedef.typedef_cmd` 在开关开着时报错，一处改在 `typedef.ML`，连同一句报错）并一度改进了私有树；作者没有取，已撤回，连同测试。
+  - 给用户的话写在 concept 的文档里（A 区计划 2.6"块里别的操作"），不在本 feature 的 README 里：本 feature 只说 `copy_bnf` 的输入若依赖上下文的假设是不支持的用法。
+
+### 8.5 之后要做的
+
+- 状态（2026-11-23 08:0x UTC）：8.4 已由作者定下（见 8.4B），代码与测试已照改，代码评审已通过（见 8.3）；作者 08:0x UTC 下令提交：
+  私有树的提交是 `5a9a011`（"global_form: a switch for targets, and six commands that run under it"），本仓库的测试与本文件随后提交。都还没有推送，推送等作者的话。
+- 作者定了 8.4 之后改代码与测试；README 的两处（"它没有 Isar 命令""`global_form f` 在 theory target 里与 `f` 相同"）要改写并加上开关与命令的清单，文字要作者批。
+- `tools/patched_files.txt`、`tools/signature_additions.txt`（加 `Local_Theory.global_form_enabled`）在发布时更新（SKILL 3.4 第 3 步）。
+- 提交、推送按作者的命令。之后建在它上面的 feature 逐级合并：`dot_syntax`（分支头还在本 feature 原来的头 `c105fb8`，是快进）→ `generic_mksimps` → `concept`。
+  concept 的 target 在 `setup` 里设这个开关。
